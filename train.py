@@ -94,8 +94,8 @@ peft_config = LoraConfig(
 model = get_peft_model(model, peft_config)
 model.print_trainable_parameters()
 
-train_dataset = load_dataset("text", data_dir="/home/xuepeng/pretrain_test/train_data", split="train")
-eval_dataset = load_dataset("text", data_dir="/home/xuepeng/pretrain_test/eval_data", split="train")
+train_dataset = load_dataset("text", data_dir="./train_data", split="train")  #  data_dir="/home/xuepeng/pretrain_test/train_data", split="train")
+eval_dataset = load_dataset("text", data_dir="./eval_data", split="train")
 
 
 def tokenization(example):
@@ -103,13 +103,14 @@ def tokenization(example):
 
 
 with training_args.main_process_first(desc="dataset map tokenization"):
+    # 表示对 train_dataset 中的每一个样本应用 tokenization 函数
     train_dataset = train_dataset.map(tokenization, remove_columns=["text"], num_proc=training_args.num_proc)
     eval_dataset = eval_dataset.map(tokenization, remove_columns=["text"], num_proc=training_args.num_proc)
 
 
 def group_texts(examples):
     # Concatenate all texts.
-    concatenated_examples = {k: list(chain(*examples[k])) for k in examples.keys()}
+    concatenated_examples = {k: list(chain(*examples[k])) for k in examples.keys()}  # chain把多个可迭代对象串起来，返回迭代器
     total_length = len(concatenated_examples[list(examples.keys())[0]])
     # We drop the small remainder, and if the total_length < block_size  we exclude this batch and return an empty dict.
     # We could add padding if the model supported it instead of this drop, you can customize this part to your needs.
