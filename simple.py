@@ -58,7 +58,7 @@ input = tokenizer(text, return_tensors="pt")
 input = {k: v.to("cuda") for k, v in input.items()}
 
 #设置labels和inputs一致
-input["labels"] = input["input_ids"].clone()
+input["labels"] = input["input_ids"].clone()  # 让模型学会从“今”预测出“天”，从“今天天气”预测出“不”，从“今天天气不错”预测出“[终止符]”（训练“续写”的能力）
 
 output = model(**input)
 
