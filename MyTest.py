@@ -361,43 +361,45 @@ def _inner_training_loop(
                 # Temporarily unset `self.args.train_batch_size`
                 original_bs = self.args.per_device_train_batch_size
                 self.args.per_device_train_batch_size = self._train_batch_size // max(1, self.args.n_gpu)
-                self.propagate_args_to_deepspeed(True)
+                self.propagate_args_to_deepspeed(True)  # 使用新算得得per device batch size设置deepspeed，再把per device batch size的值换回来
                 self.args.per_device_train_batch_size = original_bs
         self.state.train_batch_size = self._train_batch_size
     logger.debug(f"Currently training with a batch size of: {self._train_batch_size}")
     # Data loader and number of training steps
     train_dataloader = self.get_train_dataloader()
-    if self.is_fsdp_xla_v2_enabled:
+    if self.is_fsdp_xla_v2_enabled:  # TPU优化
         train_dataloader = tpu_spmd_dataloader(train_dataloader)
 
     # Setting up training control variables:
     # number of training epochs: num_train_epochs
     # number of training steps per epoch: num_update_steps_per_epoch
     # total number of training steps to execute: max_steps
+    # gradient_accumulation_steps为把多个小批次的梯度累积起来，等累积够了再进行一次反向传播和参数更新，以此模拟“大批量训练”。
+    # 每个batch算一次gradient。此处total_train_batch_size即每一次更新参数前（每个step）累积的batch size，即每个step的样本数
     total_train_batch_size = self._train_batch_size * args.gradient_accumulation_steps * args.world_size
 
     len_dataloader = None
     num_train_tokens = None
-    if has_length(train_dataloader):
+    if has_length(train_dataloader):  # 安全判断一个对象是否能用 len() 获取长度。
         len_dataloader = len(train_dataloader)
         num_update_steps_per_epoch = len_dataloader // args.gradient_accumulation_steps
-        num_update_steps_per_epoch = max(num_update_steps_per_epoch, 1)
-        num_examples = self.num_examples(train_dataloader)
-        if args.max_steps > 0:
+        num_update_steps_per_epoch = max(num_update_steps_per_epoch, 1)  # 最小为1
+        num_examples = self.num_examples(train_dataloader)  # num_examples为整个数据集的样本数
+        if args.max_steps > 0:  # 用max_steps和steps_per_epoch求num_epochs
             max_steps = args.max_steps
-            num_train_epochs = args.max_steps // num_update_steps_per_epoch + int(
-                args.max_steps % num_update_steps_per_epoch > 0
+            num_train_epochs = args.max_steps // num_update_steps_per_epoch + int(  # 一个epoch即将所有数据处理一遍
+                args.max_steps % num_update_steps_per_epoch > 0  # int(True)=1, int(False)=0，即没除尽就加一个epoch。即手动向上取证。
             )
             # May be slightly incorrect if the last batch in the training dataloader has a smaller size but it's
             # the best we can do.
             num_train_samples = args.max_steps * total_train_batch_size
-            if args.include_tokens_per_second:
+            if args.include_tokens_per_second:  # 可能为了logging或performance tracking要计算每秒处理的token数
                 num_train_tokens = (
                     self.num_tokens(train_dataloader, args.max_steps) * args.gradient_accumulation_steps
                 )
-        else:
+        else:  # 用num_epochs和steps_per_epoch求max_steps
             max_steps = math.ceil(args.num_train_epochs * num_update_steps_per_epoch)
-            num_train_epochs = math.ceil(args.num_train_epochs)
+            num_train_epochs = math.ceil(args.num_train_epochs)  # 向上取整
             num_train_samples = self.num_examples(train_dataloader) * args.num_train_epochs
             if args.include_tokens_per_second:
                 num_train_tokens = self.num_tokens(train_dataloader) * args.num_train_epochs
@@ -407,7 +409,7 @@ def _inner_training_loop(
         num_train_epochs = sys.maxsize
         num_update_steps_per_epoch = max_steps
         num_examples = total_train_batch_size * args.max_steps
-        num_train_samples = args.max_steps * total_train_batch_size
+        num_train_samples = args.max_steps * total_train_batch_size  # total_train_batch_size为每个step的样本数
         if args.include_tokens_per_second:
             num_train_tokens = self.num_tokens(train_dataloader, args.max_steps) * args.gradient_accumulation_steps
     else:
@@ -421,7 +423,7 @@ def _inner_training_loop(
             # nn.DataParallel(model) replicates the model, creating new variables and module
             # references registered here no longer work on other gpus, breaking the module
             raise ValueError(
-                "Currently --debug underflow_overflow is not supported under DP. Please use DDP"
+                "Currently --debug underflow_overflow is not supported under DP. Please use DDP"  # DP: 单机多卡。DDP：多机多卡
                 " (torchrun or torch.distributed.launch (deprecated))."
             )
         else:

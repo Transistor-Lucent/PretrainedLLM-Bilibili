@@ -1,6 +1,6 @@
 ### trainer.py - Class Trainer
 #### the calling trajectory of Trainer.train()
-```
+``` python
 Class partial:
     def __call__():
         return self.func
@@ -14,4 +14,11 @@ Class Triner
         return inner_training_loop  # call the object partial witch will run the function self._inner_training_loop()
 
     def self._inner_training_loop():
+```
+#### the structure of function Train.trainer()
+``` python
+def train():
+    set the batch size
+    load the batched data
+    set the num_epochs or max_steps
 ```
